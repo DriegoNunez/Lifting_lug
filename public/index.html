@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Steel Lifting Lug Designer</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero panel">
+        <div class="hero-copy">
+          <p class="eyebrow">AISC 360-22 + AISC design guidance + ASME BTH-1 context</p>
+          <h1 class="title">Steel lifting lug designer</h1>
+          <p class="lead">
+            Interactive preliminary sizing for an axial-loaded plate lifting lug using AISC tension and block-shear limit states
+            plus an AISC-style edge bearing proxy for the lug itself.
+          </p>
+        </div>
+
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">Helper demand</span>
+            <strong class="stat-value" data-helper-demand>--</strong>
+            <small>Per lug from W x IF / (n sin(theta))</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Selected demand</span>
+            <strong class="stat-value" data-selected-demand>--</strong>
+            <small>Compared against ASD or LRFD strength</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Safety factor</span>
+            <strong class="stat-value" data-safety-factor>--</strong>
+            <small data-safety-factor-copy>Available / demand</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Design method</span>
+            <strong class="stat-value" data-method>--</strong>
+            <small>Switches the available-strength basis</small>
+          </article>
+          <article class="stat-card stat-card-accent">
+            <span class="stat-label">Controlling check</span>
+            <strong class="stat-value" data-controlling>--</strong>
+            <small data-controlling-copy>Waiting for geometry</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form class="panel input-panel" data-form>
+          <div class="panel-heading">
+            <h2>Inputs</h2>
+            <p>US customary units: kips, inches, and ksi.</p>
+          </div>
+
+          <fieldset class="input-group">
+            <legend>Rigging helper</legend>
+            <div class="input-grid">
+              <label>
+                <span>Total lifted load, W (kips)</span>
+                <input type="number" step="0.1" min="0" name="totalLoad">
+              </label>
+              <label>
+                <span>Impact or design multiplier</span>
+                <input type="number" step="0.01" min="1" name="impactFactor">
+              </label>
+              <label>
+                <span>Active lugs sharing load</span>
+                <input type="number" step="1" min="1" name="activeLugs">
+              </label>
+              <label>
+                <span>Sling angle from horizontal, theta (deg)</span>
+                <input type="number" step="0.1" min="1" max="89.9" name="slingAngleDeg">
+              </label>
+              <div class="helper-box input-span-2">
+                <strong>Sling angle guide</strong>
+                <p>The angle is measured from the horizontal. Flatter slings increase force in each lug.</p>
+                <div class="angle-sketch" aria-hidden="true">
+                  <svg viewBox="0 0 180 70" role="presentation">
+                    <line x1="24" y1="52" x2="150" y2="52" stroke="#66717d" stroke-width="3"></line>
+                    <line x1="24" y1="52" x2="118" y2="18" stroke="#be5a2a" stroke-width="4"></line>
+                    <path d="M 54 52 A 30 30 0 0 0 51 40" fill="none" stroke="#66717d" stroke-width="2"></path>
+                    <text x="58" y="42" font-size="16" fill="#35404d">theta</text>
+                    <text x="126" y="22" font-size="14" fill="#be5a2a">sling</text>
+                    <text x="122" y="66" font-size="14" fill="#35404d">horizontal</text>
+                  </svg>
+                </div>
+              </div>
+              <label class="input-span-2 toggle-row">
+                <input type="checkbox" name="useHelperDemand">
+                <span>Use helper result as the governing per-lug demand</span>
+              </label>
+              <label class="input-span-2">
+                <span>Manual per-lug demand (kips)</span>
+                <input type="number" step="0.1" min="0" name="manualDemand">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="input-group">
+            <legend>Design basis</legend>
+            <div class="input-grid">
+              <label>
+                <span>Method</span>
+                <select name="designMethod">
+                  <option value="ASD">ASD</option>
+                  <option value="LRFD">LRFD</option>
+                </select>
+              </label>
+              <label class="toggle-row">
+                <input type="checkbox" name="considerDeformation">
+                <span>Use the lower end-bearing limit when hole deformation matters</span>
+              </label>
+              <label>
+                <span>Shear-lag factor, U</span>
+                <input type="number" step="0.01" min="0.5" max="1" name="shearLagFactor">
+              </label>
+              <label>
+                <span>Block shear factor, Ubs</span>
+                <input type="number" step="0.01" min="0.5" max="1" name="blockShearFactor">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="input-group">
+            <legend>Plate geometry and material</legend>
+            <div class="input-grid">
+              <label>
+                <span>Fy (ksi)</span>
+                <input type="number" step="0.1" min="0" name="fy">
+              </label>
+              <label>
+                <span>Fu (ksi)</span>
+                <input type="number" step="0.1" min="0" name="fu">
+              </label>
+              <label>
+                <span>Plate thickness, t (in)</span>
+                <input type="number" step="0.0625" min="0" name="thickness">
+              </label>
+              <label>
+                <span>Plate width at hole, b (in)</span>
+                <input type="number" step="0.125" min="0" name="width">
+              </label>
+              <label>
+                <span>Hole diameter, dh (in)</span>
+                <input type="number" step="0.0625" min="0" name="holeDiameter">
+              </label>
+              <label>
+                <span>Pin diameter, dp (in)</span>
+                <input type="number" step="0.0625" min="0" name="pinDiameter">
+              </label>
+              <label class="input-span-2">
+                <span>Hole center to loaded edge, e (in)</span>
+                <input type="number" step="0.125" min="0" name="edgeDistance">
+              </label>
+            </div>
+          </fieldset>
+        </form>
+
+        <section class="panel output-panel" aria-live="polite">
+          <div class="panel-heading">
+            <h2>Results</h2>
+            <p>Use this as a preliminary lug check, not a stamped design package.</p>
+          </div>
+
+          <div class="verdict-card" data-verdict></div>
+
+          <div class="visual-grid">
+            <div class="diagram-card">
+              <div class="subheading-row">
+                <h3>Lug figure</h3>
+              </div>
+              <svg class="diagram" data-diagram viewBox="0 0 420 360" role="img" aria-label="Lifting lug figure"></svg>
+            </div>
+
+            <div class="geometry-card">
+              <div class="subheading-row">
+                <h3>Section properties</h3>
+                <span class="chip">Derived from current inputs</span>
+              </div>
+              <div class="metric-grid" data-geometry></div>
+            </div>
+          </div>
+
+          <div class="subheading-row">
+            <h3>Limit-state checks</h3>
+            <span class="chip" data-available-label>Available strength</span>
+          </div>
+          <div class="checks-grid" data-checks></div>
+
+          <div class="messages" data-messages></div>
+        </section>
+      </section>
+
+      <section class="panel sources-panel">
+        <div class="panel-heading">
+          <h2>Engineering basis and limits</h2>
+          <p>
+            This page is intentionally transparent about what it does and does not automate. It is grounded in AISC 360-22
+            tension and connection-style limit states and ASME BTH-1 below-the-hook design context for rated-load workflows
+            and fatigue-sensitive devices.
+          </p>
+        </div>
+
+        <div class="source-layout">
+          <div>
+            <h3>Implemented checks</h3>
+            <ul class="plain-list">
+              <li>Gross-section yielding and net-section rupture of the lug plate.</li>
+              <li>Block shear around the loaded edge using Ubs-adjusted tension area.</li>
+              <li>End-distance bearing and tear-out using an AISC J3.10-style pin proxy.</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3>Still required outside this tool</h3>
+            <ul class="plain-list">
+              <li>ASME BTH-1 device classification, fatigue life, and service-class review.</li>
+              <li>Pin, shackle, cheek plate, out-of-plane bending, and local bearing verification.</li>
+              <li>Supporting member, attachment design, and constructability checks.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div>
+          <h3>Primary references</h3>
+          <ul class="source-list">
+            <li><a href="https://www.aisc.org/2022spec" target="_blank" rel="noreferrer">AISC 360-22 Specification landing page</a></li>
+            <li><a href="https://www.aisc.org/publications/design-guides/" target="_blank" rel="noreferrer">AISC Design Guides library</a></li>
+            <li><a href="https://www.asme.org/codes-standards/find-codes-standards/bth-1-design-of-below-the-hook-lifting-devices" target="_blank" rel="noreferrer">ASME BTH-1: Design of Below-the-Hook Lifting Devices</a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
