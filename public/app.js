@@ -1,58 +1,38 @@
 import { calculateLiftingLug } from "./lifting-lug-engine.js";
 
 const DEFAULT_INPUTS = {
-  totalLoad: 20,
-  impactFactor: 1.15,
-  activeLugs: 2,
-  slingAngleDeg: 60,
-  useHelperDemand: true,
-  manualDemand: 13.3,
-  designMethod: "ASD",
-  considerDeformation: true,
-  shearLagFactor: 1,
-  blockShearFactor: 1,
-  fy: 50,
-  fu: 65,
-  thickness: 1,
-  width: 6,
-  holeDiameter: 2,
-  pinDiameter: 1.75,
-  edgeDistance: 3
-};
-
-const DETAIL_LABELS = {
-  grossArea: "Ag",
-  netArea: "An",
-  effectiveNetArea: "Ae",
-  shearLagFactor: "U",
-  grossShearArea: "Agv",
-  netShearArea: "Anv",
-  tensionArea: "Ant",
-  blockShearFactor: "Ubs",
-  clearEdgeDistance: "Lc",
-  pinDiameter: "dp",
-  fy: "Fy",
-  fu: "Fu"
+  elasticModulus: 29000,
+  baseFy: 50,
+  baseFu: 65,
+  lugFy: 50,
+  lugFu: 65,
+  materialAbovePin: 6,
+  holeDiameter: 8,
+  pinDiameter: 8,
+  materialBelowHole: 22,
+  lugThickness: 1,
+  designLoad: 95,
+  outOfPlaneAngleDeg: 0,
+  shearPlaneAngleDeg: 0,
+  nominalDesignFactor: 4,
+  tensionRuptureOmega: 3
 };
 
 const form = document.querySelector("[data-form]");
-const helperDemandValue = document.querySelector("[data-helper-demand]");
-const selectedDemandValue = document.querySelector("[data-selected-demand]");
-const safetyFactorValue = document.querySelector("[data-safety-factor]");
-const safetyFactorCopy = document.querySelector("[data-safety-factor-copy]");
-const methodValue = document.querySelector("[data-method]");
-const controllingValue = document.querySelector("[data-controlling]");
-const controllingCopy = document.querySelector("[data-controlling-copy]");
-const availableLabel = document.querySelector("[data-available-label]");
+const designLoadValue = document.querySelector("[data-design-load]");
+const governingCapacityValue = document.querySelector("[data-governing-capacity]");
+const reserveRatioValue = document.querySelector("[data-reserve-ratio]");
+const shearReductionValue = document.querySelector("[data-shear-reduction]");
+const governingModeValue = document.querySelector("[data-governing-mode]");
+const governingCopy = document.querySelector("[data-governing-copy]");
 const verdict = document.querySelector("[data-verdict]");
 const geometry = document.querySelector("[data-geometry]");
+const allowables = document.querySelector("[data-allowables]");
 const checks = document.querySelector("[data-checks]");
 const messages = document.querySelector("[data-messages]");
 const diagram = document.querySelector("[data-diagram]");
-const useHelperDemand = form.elements.namedItem("useHelperDemand");
-const manualDemand = form.elements.namedItem("manualDemand");
 
-function formatNumber(value, maximumFractionDigits = 2) {
+function formatNumber(value, maximumFractionDigits = 3) {
   if (!Number.isFinite(value)) {
     return "--";
   }
@@ -64,19 +44,19 @@ function formatNumber(value, maximumFractionDigits = 2) {
 }
 
 function formatKips(value) {
-  return `${formatNumber(value, 2)} kip`;
+  return Number.isFinite(value) ? `${formatNumber(value, 3)} kip` : "Not checked";
 }
 
-function formatArea(value) {
-  return `${formatNumber(value, 3)} in2`;
+function formatStress(value) {
+  return Number.isFinite(value) ? `${formatNumber(value, 3)} ksi` : "--";
+}
+
+function formatLength(value) {
+  return Number.isFinite(value) ? `${formatNumber(value, 3)} in` : "Not checked";
 }
 
 function formatRatio(value) {
-  if (value === null) {
-    return "Geometry invalid";
-  }
-
-  return `${formatNumber(value * 100, 0)}% utilization`;
+  return Number.isFinite(value) ? `${formatNumber(value, 2)}x` : "Not checked";
 }
 
 function escapeHtml(value) {
@@ -95,141 +75,147 @@ function clamp(value, min, max) {
 function applyDefaults() {
   Object.entries(DEFAULT_INPUTS).forEach(([name, value]) => {
     const field = form.elements.namedItem(name);
-
-    if (!field) {
-      return;
+    if (field) {
+      field.value = String(value);
     }
-
-    if (field instanceof HTMLInputElement && field.type === "checkbox") {
-      field.checked = Boolean(value);
-      return;
-    }
-
-    field.value = String(value);
   });
 }
 
 function readInputs() {
   return {
-    totalLoad: form.elements.namedItem("totalLoad").value,
-    impactFactor: form.elements.namedItem("impactFactor").value,
-    activeLugs: form.elements.namedItem("activeLugs").value,
-    slingAngleDeg: form.elements.namedItem("slingAngleDeg").value,
-    useHelperDemand: useHelperDemand.checked,
-    manualDemand: manualDemand.value,
-    designMethod: form.elements.namedItem("designMethod").value,
-    considerDeformation: form.elements.namedItem("considerDeformation").checked,
-    shearLagFactor: form.elements.namedItem("shearLagFactor").value,
-    blockShearFactor: form.elements.namedItem("blockShearFactor").value,
-    fy: form.elements.namedItem("fy").value,
-    fu: form.elements.namedItem("fu").value,
-    thickness: form.elements.namedItem("thickness").value,
-    width: form.elements.namedItem("width").value,
+    elasticModulus: form.elements.namedItem("elasticModulus").value,
+    baseFy: form.elements.namedItem("baseFy").value,
+    baseFu: form.elements.namedItem("baseFu").value,
+    lugFy: form.elements.namedItem("lugFy").value,
+    lugFu: form.elements.namedItem("lugFu").value,
+    materialAbovePin: form.elements.namedItem("materialAbovePin").value,
     holeDiameter: form.elements.namedItem("holeDiameter").value,
     pinDiameter: form.elements.namedItem("pinDiameter").value,
-    edgeDistance: form.elements.namedItem("edgeDistance").value
+    materialBelowHole: form.elements.namedItem("materialBelowHole").value,
+    lugThickness: form.elements.namedItem("lugThickness").value,
+    designLoad: form.elements.namedItem("designLoad").value,
+    outOfPlaneAngleDeg: form.elements.namedItem("outOfPlaneAngleDeg").value,
+    shearPlaneAngleDeg: form.elements.namedItem("shearPlaneAngleDeg").value,
+    nominalDesignFactor: form.elements.namedItem("nominalDesignFactor").value,
+    tensionRuptureOmega: form.elements.namedItem("tensionRuptureOmega").value
   };
 }
 
-function updateDemandMode() {
-  manualDemand.disabled = useHelperDemand.checked;
-}
-
 function renderVerdict(result) {
-  const allPass = result.checks.every((check) => check.status === "pass");
   const controlling = result.controllingCheck;
-  const verdictClass = allPass ? "pass" : "fail";
-  const verdictTitle = allPass ? "Current inputs pass every implemented lug check" : "Current inputs do not satisfy every implemented lug check";
-  const methodLabel = result.inputs.designMethod === "LRFD" ? "phi Rn" : "Rn / Omega";
-  const controllingLabel = controlling ? controlling.label : "No controlling check";
-  const controllingStrength = controlling ? formatKips(controlling.available) : "--";
+  const verdictClass = result.summary.allPass ? "pass" : "fail";
+  const title = result.summary.allPass
+    ? "Current inputs exceed the design load for every numeric failure mode"
+    : "At least one failure mode falls at or below the design load";
+  const note = controlling
+    ? `Governing workbook mode: ${controlling.label} with P_allow = ${formatKips(controlling.allowable)} against a design load of ${formatKips(result.loading.designLoad)}.`
+    : "No numeric governing mode is available from the current inputs.";
 
   verdict.className = `verdict-card ${verdictClass}`;
   verdict.innerHTML = `
-    <h3 class="verdict-title">${escapeHtml(verdictTitle)}</h3>
-    <p class="verdict-note">
-      Demand compared in this run: <strong>${escapeHtml(formatKips(result.demand.selectedDemand))}</strong>.
-      Controlling state: <strong>${escapeHtml(controllingLabel)}</strong> with ${escapeHtml(methodLabel)} =
-      <strong>${escapeHtml(controllingStrength)}</strong>.
-    </p>
+    <h3 class="verdict-title">${escapeHtml(title)}</h3>
+    <p class="verdict-note">${escapeHtml(note)}</p>
   `;
+}
+
+function renderSummaryStrip(result) {
+  const controlling = result.controllingCheck;
+  const reserveRatio = controlling && result.loading.designLoad > 0
+    ? controlling.allowable / result.loading.designLoad
+    : null;
+
+  designLoadValue.textContent = formatKips(result.loading.designLoad);
+  governingCapacityValue.textContent = controlling ? formatKips(controlling.allowable) : "--";
+  reserveRatioValue.textContent = formatRatio(reserveRatio);
+  shearReductionValue.textContent = formatLength(result.loading.shearPlaneReduction);
+  governingModeValue.textContent = controlling ? controlling.label : "Not checked";
+  governingCopy.textContent = controlling
+    ? `${escapeHtml(controlling.reference)} | margin = ${formatKips(controlling.margin)}`
+    : "No governing failure mode could be resolved from the current inputs.";
 }
 
 function renderGeometry(result) {
   geometry.innerHTML = `
     <article class="metric-card">
-      <span class="metric-label">Gross area, Ag</span>
-      <strong class="metric-value">${escapeHtml(formatArea(result.geometry.grossArea))}</strong>
+      <span class="metric-label">Radius, r</span>
+      <strong class="metric-value">${escapeHtml(formatLength(result.geometry.radius))}</strong>
     </article>
     <article class="metric-card">
-      <span class="metric-label">Net area, An</span>
-      <strong class="metric-value">${escapeHtml(formatArea(result.geometry.netArea))}</strong>
+      <span class="metric-label">Side material, b_e</span>
+      <strong class="metric-value">${escapeHtml(formatLength(result.geometry.sideMaterial))}</strong>
     </article>
     <article class="metric-card">
-      <span class="metric-label">Effective net area, Ae</span>
-      <strong class="metric-value">${escapeHtml(formatArea(result.geometry.effectiveNetArea))}</strong>
+      <span class="metric-label">Base total, B_tot</span>
+      <strong class="metric-value">${escapeHtml(formatLength(result.geometry.baseTotal))}</strong>
     </article>
     <article class="metric-card">
-      <span class="metric-label">Net shear area, Anv</span>
-      <strong class="metric-value">${escapeHtml(formatArea(result.geometry.netShearArea))}</strong>
+      <span class="metric-label">Total height, H</span>
+      <strong class="metric-value">${escapeHtml(formatLength(result.geometry.totalHeight))}</strong>
     </article>
     <article class="metric-card">
-      <span class="metric-label">Clear edge distance, Lc</span>
-      <strong class="metric-value">${escapeHtml(`${formatNumber(result.geometry.clearEdgeDistance, 3)} in`)}</strong>
+      <span class="metric-label">Effective width, b_e,eff</span>
+      <strong class="metric-value">${escapeHtml(formatLength(result.geometry.effectiveTensionWidth))}</strong>
     </article>
     <article class="metric-card">
-      <span class="metric-label">Hole minus pin clearance</span>
-      <strong class="metric-value">${escapeHtml(`${formatNumber(result.geometry.holeClearance, 4)} in`)}</strong>
+      <span class="metric-label">Shear area, A_sf</span>
+      <strong class="metric-value">${escapeHtml(`${formatNumber(result.geometry.shearArea, 3)} in2`)}</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Plastic section modulus</span>
+      <strong class="metric-value">${escapeHtml(`${formatNumber(result.geometry.plasticSectionModulus, 3)} in3`)}</strong>
+    </article>
+    <article class="metric-card">
+      <span class="metric-label">Weak-axis lever arm</span>
+      <strong class="metric-value">${escapeHtml(formatLength(result.geometry.outOfPlaneLeverArm))}</strong>
     </article>
   `;
 }
 
-function renderChecks(result) {
-  const orderedChecks = [...result.checks].sort((left, right) => right.sortRatio - left.sortRatio);
-  const strengthLabel = result.inputs.designMethod === "LRFD" ? "phi Rn" : "Rn / Omega";
+function renderAllowables(result) {
+  allowables.innerHTML = result.allowables
+    .map((item) => `
+      <article class="allowable-card">
+        <span class="metric-label">${escapeHtml(item.label)}</span>
+        <strong class="metric-value">${escapeHtml(formatStress(item.allowableStress))}</strong>
+        <p class="allowable-meta">${escapeHtml(item.reference)}</p>
+        <p class="allowable-meta">
+          ${escapeHtml(item.safetyFactor === null ? "Workbook leaves Omega blank" : `Safety factor = ${formatNumber(item.safetyFactor, 3)}`)}
+        </p>
+      </article>
+    `)
+    .join("");
+}
 
-  availableLabel.textContent = `${strengthLabel} shown on each card`;
-  checks.innerHTML = orderedChecks
+function renderChecks(result) {
+  checks.innerHTML = result.checks
     .map((check) => {
-      const factorText = `${check.factorLabel} = ${formatNumber(check.factorValue, 2)}`;
-      const detailLines = [
-        `<li>${escapeHtml(check.details.equation)}</li>`,
-        ...Object.entries(check.details)
-          .filter(([key]) => key !== "equation")
-          .map(([key, value]) => {
-            const detailLabel = DETAIL_LABELS[key] || key;
-            const displayValue = typeof value === "number" ? formatNumber(value, 3) : value;
-            return `<li>${escapeHtml(`${detailLabel} = ${displayValue}`)}</li>`;
-          })
-      ].join("");
+      const details = Object.entries(check.details)
+        .map(([key, value]) => `<li>${escapeHtml(`${key}: ${Number.isFinite(value) ? formatNumber(value, 3) : value}`)}</li>`)
+        .join("");
 
       return `
         <article class="check-card ${escapeHtml(check.status)}">
           <div class="check-top">
             <div>
               <h4 class="check-title">${escapeHtml(check.label)}</h4>
-              <p class="check-meta">${escapeHtml(check.spec)} | factor: ${escapeHtml(factorText)}</p>
+              <p class="check-meta">${escapeHtml(check.reference)}</p>
             </div>
             <div class="badge ${escapeHtml(check.status)}">${escapeHtml(check.status)}</div>
           </div>
-          <p class="check-copy">
-            ${escapeHtml(formatRatio(check.ratio))}${check.isApproximate ? " | proxy" : ""}
-          </p>
-          <div class="check-strength">
-            <div class="strength-box">
-              <span>${escapeHtml(check.availableExpression)}</span>
-              <strong>${escapeHtml(formatKips(check.available))}</strong>
-            </div>
-            <div class="strength-box">
-              <span>Nominal strength, Rn</span>
-              <strong>${escapeHtml(formatKips(check.nominal))}</strong>
-            </div>
-            <div class="strength-box">
-              <span>Factor used</span>
-              <strong>${escapeHtml(factorText)}</strong>
-            </div>
+          <p class="check-copy">${escapeHtml(check.equation)}</p>
+          <div class="strength-box">
+            <span>P_allow</span>
+            <strong>${escapeHtml(formatKips(check.allowable))}</strong>
           </div>
-          <ul class="detail-list">${detailLines}</ul>
+          <div class="strength-box">
+            <span>Reserve ratio</span>
+            <strong>${escapeHtml(formatRatio(check.ratio))}</strong>
+          </div>
+          <div class="strength-box">
+            <span>Margin to load</span>
+            <strong>${escapeHtml(formatKips(check.margin))}</strong>
+          </div>
+          <ul class="detail-list">${details}</ul>
         </article>
       `;
     })
@@ -247,64 +233,33 @@ function renderMessages(result) {
     .join("");
 }
 
-function renderSummaryStrip(result) {
-  helperDemandValue.textContent = formatKips(result.demand.helperDemand);
-  selectedDemandValue.textContent = formatKips(result.demand.selectedDemand);
-  methodValue.textContent = result.inputs.designMethod;
-
-  if (!result.controllingCheck) {
-    safetyFactorValue.textContent = "--";
-    safetyFactorCopy.textContent = "Available / demand";
-    controllingValue.textContent = "--";
-    controllingCopy.textContent = "No check could be resolved from the current inputs.";
-    return;
-  }
-
-  const safetyFactor = result.demand.selectedDemand > 0
-    ? result.controllingCheck.available / result.demand.selectedDemand
-    : null;
-  const factorText = `${result.controllingCheck.factorLabel} = ${formatNumber(result.controllingCheck.factorValue, 2)}`;
-
-  safetyFactorValue.textContent = safetyFactor === null ? "--" : formatNumber(safetyFactor, 2);
-  safetyFactorCopy.textContent = `${result.inputs.designMethod} | ${factorText}`;
-  controllingValue.textContent = result.controllingCheck.label;
-  controllingCopy.textContent = `${formatRatio(result.controllingCheck.ratio)} | ${formatKips(result.controllingCheck.available)} available | ${factorText}`;
-}
-
 function renderDiagram(result) {
-  const widthIn = Math.max(result.inputs.width, result.inputs.holeDiameter + 0.75);
-  const edgeIn = Math.max(result.inputs.edgeDistance, result.inputs.holeDiameter / 2 + 0.375);
-  const holeIn = Math.max(result.inputs.holeDiameter, 0.5);
-  const pinIn = clamp(result.inputs.pinDiameter, 0.25, holeIn);
-  const thicknessIn = Math.max(result.inputs.thickness, 0.25);
-  const bodyDepthIn = Math.max(widthIn * 0.85, edgeIn + holeIn * 0.6 + 1.5);
-  const overallHeightIn = Math.max(widthIn / 2 + bodyDepthIn, edgeIn + holeIn / 2 + 2.5);
-  const maxHalfWidthPx = 84;
-  const maxHeightPx = 214;
-  const scale = clamp(
-    Math.min((maxHalfWidthPx * 2) / widthIn, maxHeightPx / overallHeightIn),
-    5,
-    18
-  );
+  const baseWidthIn = Math.max(result.geometry.baseTotal, result.inputs.holeDiameter + 1);
+  const totalHeightIn = Math.max(result.geometry.totalHeight, result.inputs.holeDiameter + 2);
+  const radiusIn = Math.max(result.geometry.radius, result.inputs.holeDiameter / 2 + 0.5);
+  const holeDiameterIn = Math.max(result.inputs.holeDiameter, 0.5);
+  const thicknessIn = Math.max(result.inputs.lugThickness, 0.25);
+  const scale = clamp(Math.min(180 / baseWidthIn, 250 / totalHeightIn), 5, 16);
   const cx = 170;
-  const topY = 46;
-  const halfWidth = (widthIn * scale) / 2;
-  const arcCenterY = topY + halfWidth;
-  const bottomY = topY + overallHeightIn * scale;
-  const holeRadius = clamp((holeIn * scale) / 2, 9, 28);
-  const holeCenterY = clamp(topY + edgeIn * scale, topY + holeRadius + 8, bottomY - holeRadius - 22);
-  const pinRadius = clamp(holeRadius * (pinIn / holeIn), 6, holeRadius - 2);
-  const widthDimY = Math.min(bottomY + 22, 330);
-  const edgeDimX = Math.min(cx + halfWidth + 34, 298);
-  const dhDimY = Math.max(topY + 16, holeCenterY - holeRadius - 18);
-  const tInsetX = 314;
-  const tInsetY = 254;
-  const thicknessViz = clamp(thicknessIn * 10, 10, 24);
-  const lugPath = [
-    `M ${cx - halfWidth} ${bottomY}`,
-    `L ${cx - halfWidth} ${arcCenterY}`,
-    `A ${halfWidth} ${halfWidth} 0 0 1 ${cx + halfWidth} ${arcCenterY}`,
-    `L ${cx + halfWidth} ${bottomY}`,
+  const topY = 42;
+  const holeRadius = (holeDiameterIn * scale) / 2;
+  const outerRadius = radiusIn * scale;
+  const holeCenterY = topY + outerRadius;
+  const rectBottomY = holeCenterY + result.inputs.materialBelowHole * scale;
+  const halfWidth = (baseWidthIn * scale) / 2;
+  const widthDimY = Math.min(rectBottomY + 24, 334);
+  const edgeDimX = Math.min(cx + halfWidth + 34, 314);
+  const topArcLeft = cx - halfWidth;
+  const topArcRight = cx + halfWidth;
+  const pinRadius = holeRadius * clamp(result.inputs.pinDiameter / result.inputs.holeDiameter, 0.35, 1);
+  const tInsetX = 318;
+  const tInsetY = 266;
+  const thicknessViz = clamp(thicknessIn * 12, 10, 26);
+  const outerPath = [
+    `M ${topArcLeft} ${rectBottomY}`,
+    `L ${topArcLeft} ${holeCenterY}`,
+    `A ${outerRadius} ${outerRadius} 0 0 1 ${topArcRight} ${holeCenterY}`,
+    `L ${topArcRight} ${rectBottomY}`,
     "Z"
   ].join(" ");
 
@@ -315,38 +270,39 @@ function renderDiagram(result) {
       </marker>
     </defs>
     <rect x="12" y="12" width="396" height="336" rx="22" fill="#f9f5ec" stroke="rgba(53, 64, 77, 0.12)"></rect>
-    <line x1="28" y1="${holeCenterY}" x2="320" y2="${holeCenterY}" stroke="#8b877f" stroke-width="2" stroke-dasharray="8 8"></line>
-    <line x1="${cx}" y1="18" x2="${cx}" y2="338" stroke="#8b877f" stroke-width="2" stroke-dasharray="8 8"></line>
-    <path d="${lugPath}" fill="#f7f4ec" stroke="#121416" stroke-width="4"></path>
+    <line x1="${cx}" y1="20" x2="${cx}" y2="340" stroke="#8b877f" stroke-width="2" stroke-dasharray="8 8"></line>
+    <path d="${outerPath}" fill="#f7f4ec" stroke="#121416" stroke-width="4"></path>
     <circle cx="${cx}" cy="${holeCenterY}" r="${holeRadius}" fill="#fffaf0" stroke="#121416" stroke-width="4"></circle>
     <circle cx="${cx}" cy="${holeCenterY}" r="${pinRadius}" fill="none" stroke="#4d545e" stroke-width="3"></circle>
-    <line x1="${cx - halfWidth}" y1="${bottomY}" x2="${cx - halfWidth}" y2="${widthDimY}" stroke="#66717d" stroke-width="2"></line>
-    <line x1="${cx + halfWidth}" y1="${bottomY}" x2="${cx + halfWidth}" y2="${widthDimY}" stroke="#66717d" stroke-width="2"></line>
-    <line x1="${cx - halfWidth}" y1="${widthDimY}" x2="${cx + halfWidth}" y2="${widthDimY}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
-    <text x="${cx}" y="${widthDimY - 8}" text-anchor="middle" font-size="15" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">b = ${formatNumber(result.inputs.width, 3)} in</text>
-    <line x1="${cx + 6}" y1="${topY}" x2="${edgeDimX}" y2="${topY}" stroke="#66717d" stroke-width="2"></line>
-    <line x1="${cx + holeRadius + 6}" y1="${holeCenterY}" x2="${edgeDimX}" y2="${holeCenterY}" stroke="#66717d" stroke-width="2"></line>
+    <line x1="${topArcLeft}" y1="${rectBottomY}" x2="${topArcLeft}" y2="${widthDimY}" stroke="#66717d" stroke-width="2"></line>
+    <line x1="${topArcRight}" y1="${rectBottomY}" x2="${topArcRight}" y2="${widthDimY}" stroke="#66717d" stroke-width="2"></line>
+    <line x1="${topArcLeft}" y1="${widthDimY}" x2="${topArcRight}" y2="${widthDimY}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
+    <text x="${cx}" y="${widthDimY - 8}" text-anchor="middle" font-size="15" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">B_tot = ${formatNumber(result.geometry.baseTotal, 3)} in</text>
+    <line x1="${cx + holeRadius + 8}" y1="${topY}" x2="${edgeDimX}" y2="${topY}" stroke="#66717d" stroke-width="2"></line>
+    <line x1="${cx + holeRadius + 8}" y1="${holeCenterY}" x2="${edgeDimX}" y2="${holeCenterY}" stroke="#66717d" stroke-width="2"></line>
     <line x1="${edgeDimX}" y1="${topY}" x2="${edgeDimX}" y2="${holeCenterY}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
-    <text x="${edgeDimX + 8}" y="${topY + (holeCenterY - topY) / 2 + 4}" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">e = ${formatNumber(result.inputs.edgeDistance, 3)} in</text>
-    <line x1="${cx - holeRadius}" y1="${holeCenterY}" x2="${cx - holeRadius}" y2="${dhDimY}" stroke="#66717d" stroke-width="2"></line>
-    <line x1="${cx + holeRadius}" y1="${holeCenterY}" x2="${cx + holeRadius}" y2="${dhDimY}" stroke="#66717d" stroke-width="2"></line>
-    <line x1="${cx - holeRadius}" y1="${dhDimY}" x2="${cx + holeRadius}" y2="${dhDimY}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
-    <text x="${cx}" y="${dhDimY - 8}" text-anchor="middle" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">dh = ${formatNumber(result.inputs.holeDiameter, 3)} in</text>
-    <text x="${cx + holeRadius + 14}" y="${holeCenterY + 6}" font-size="13" font-family="Aptos, Segoe UI, sans-serif" fill="#4d545e">dp = ${formatNumber(result.inputs.pinDiameter, 3)} in</text>
-    <rect x="${tInsetX - 14}" y="${tInsetY - 30}" width="70" height="62" rx="12" fill="rgba(255,255,255,0.72)" stroke="rgba(53, 64, 77, 0.12)"></rect>
+    <text x="${edgeDimX + 8}" y="${topY + (holeCenterY - topY) / 2 + 4}" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">a = ${formatNumber(result.inputs.materialAbovePin, 3)} in</text>
+    <line x1="${cx - holeRadius}" y1="${holeCenterY}" x2="${cx - holeRadius}" y2="${topY - 4}" stroke="#66717d" stroke-width="2"></line>
+    <line x1="${cx + holeRadius}" y1="${holeCenterY}" x2="${cx + holeRadius}" y2="${topY - 4}" stroke="#66717d" stroke-width="2"></line>
+    <line x1="${cx - holeRadius}" y1="${topY - 4}" x2="${cx + holeRadius}" y2="${topY - 4}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
+    <text x="${cx}" y="${topY - 12}" text-anchor="middle" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">D_h = ${formatNumber(result.inputs.holeDiameter, 3)} in</text>
+    <line x1="${topArcRight + 10}" y1="${holeCenterY}" x2="${topArcRight + 10}" y2="${rectBottomY}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
+    <text x="${topArcRight + 18}" y="${holeCenterY + (rectBottomY - holeCenterY) / 2 + 4}" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">h = ${formatNumber(result.inputs.materialBelowHole, 3)} in</text>
+    <text x="${cx + holeRadius + 12}" y="${holeCenterY + 6}" font-size="13" font-family="Aptos, Segoe UI, sans-serif" fill="#4d545e">D_pin = ${formatNumber(result.inputs.pinDiameter, 3)} in</text>
+    <rect x="${tInsetX - 14}" y="${tInsetY - 30}" width="72" height="62" rx="12" fill="rgba(255,255,255,0.72)" stroke="rgba(53, 64, 77, 0.12)"></rect>
     <line x1="${tInsetX}" y1="${tInsetY - 16}" x2="${tInsetX}" y2="${tInsetY + 16}" stroke="#121416" stroke-width="4"></line>
     <line x1="${tInsetX + thicknessViz}" y1="${tInsetY - 16}" x2="${tInsetX + thicknessViz}" y2="${tInsetY + 16}" stroke="#121416" stroke-width="4"></line>
     <line x1="${tInsetX}" y1="${tInsetY + 22}" x2="${tInsetX + thicknessViz}" y2="${tInsetY + 22}" stroke="#66717d" stroke-width="2" marker-start="url(#dim-arrow)" marker-end="url(#dim-arrow)"></line>
-    <text x="${tInsetX + thicknessViz / 2}" y="${tInsetY - 20}" text-anchor="middle" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">t = ${formatNumber(result.inputs.thickness, 3)} in</text>
+    <text x="${tInsetX + thicknessViz / 2}" y="${tInsetY - 20}" text-anchor="middle" font-size="14" font-family="Aptos, Segoe UI, sans-serif" fill="#35404d">t = ${formatNumber(result.inputs.lugThickness, 3)} in</text>
   `;
 }
 
 function render() {
-  updateDemandMode();
   const result = calculateLiftingLug(readInputs());
   renderSummaryStrip(result);
   renderVerdict(result);
   renderGeometry(result);
+  renderAllowables(result);
   renderChecks(result);
   renderMessages(result);
   renderDiagram(result);

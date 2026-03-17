@@ -385,6 +385,27 @@ input:disabled {
   gap: 0.95rem;
 }
 
+.allowables-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.95rem;
+  margin-bottom: 1rem;
+}
+
+.allowable-card {
+  padding: 0.9rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(53, 64, 77, 0.1);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.allowable-meta {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .check-card {
   padding: 1rem;
   border-radius: 1rem;
@@ -536,7 +557,8 @@ input:disabled {
   .workspace,
   .visual-grid,
   .source-layout,
-  .checks-grid {
+  .checks-grid,
+  .allowables-grid {
     grid-template-columns: 1fr;
   }
 }

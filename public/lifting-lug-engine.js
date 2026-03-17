@@ -1,18 +1,6 @@
-const DESIGN_FACTORS = {
-  LRFD: {
-    label: "LRFD",
-    grossYielding: { phi: 0.9, omega: 1.67 },
-    netRupture: { phi: 0.75, omega: 2.0 },
-    blockShear: { phi: 0.75, omega: 2.0 },
-    bearing: { phi: 0.75, omega: 2.0 }
-  },
-  ASD: {
-    label: "ASD",
-    grossYielding: { phi: 0.9, omega: 1.67 },
-    netRupture: { phi: 0.75, omega: 2.0 },
-    blockShear: { phi: 0.75, omega: 2.0 },
-    bearing: { phi: 0.75, omega: 2.0 }
-  }
+const DEFAULT_ALLOWABLES = {
+  nominalDesignFactor: 4,
+  tensionRuptureOmega: 3
 };
 
 function toFiniteNumber(value, fallback = 0) {
@@ -21,250 +9,303 @@ function toFiniteNumber(value, fallback = 0) {
 }
 
 function round(value, decimals = 3) {
+  if (!Number.isFinite(value)) {
+    return value;
+  }
+
   const scale = 10 ** decimals;
   return Math.round(value * scale) / scale;
 }
 
-function createCheck({
+function createFailureMode({
   key,
   label,
-  spec,
-  nominal,
-  method,
-  demand,
-  details,
-  phi,
-  omega,
-  isApproximate = false
+  reference,
+  equation,
+  allowable,
+  load,
+  details
 }) {
-  const available = method === "LRFD" ? phi * nominal : nominal / omega;
-  const rawRatio = available > 0 ? demand / available : Number.POSITIVE_INFINITY;
+  const ratio = Number.isFinite(allowable) && load > 0 ? allowable / load : null;
+  const margin = Number.isFinite(allowable) ? allowable - load : null;
+  const status = Number.isFinite(allowable) ? (allowable > load ? "pass" : "fail") : "note";
 
   return {
     key,
     label,
-    spec,
-    nominal: round(nominal),
-    available: round(available),
-    ratio: Number.isFinite(rawRatio) ? round(rawRatio) : null,
-    sortRatio: rawRatio,
-    status: available > 0 && demand <= available ? "pass" : "fail",
-    factorLabel: method === "LRFD" ? "phi" : "Omega",
-    factorValue: round(method === "LRFD" ? phi : omega, 2),
-    availableExpression: method === "LRFD" ? "phi Rn" : "Rn / Omega",
-    isApproximate,
+    reference,
+    equation,
+    allowable: Number.isFinite(allowable) ? round(allowable) : null,
+    ratio: Number.isFinite(ratio) ? round(ratio) : null,
+    margin: Number.isFinite(margin) ? round(margin) : null,
+    status,
     details
-  };
-}
-
-function buildDemand(inputs) {
-  const totalLoad = toFiniteNumber(inputs.totalLoad);
-  const impactFactor = toFiniteNumber(inputs.impactFactor, 1);
-  const activeLugs = Math.max(1, toFiniteNumber(inputs.activeLugs, 1));
-  const slingAngleDeg = toFiniteNumber(inputs.slingAngleDeg, 60);
-  const manualDemand = toFiniteNumber(inputs.manualDemand);
-  const useHelperDemand = Boolean(inputs.useHelperDemand);
-
-  const angleRadians = (slingAngleDeg * Math.PI) / 180;
-  const sine = Math.sin(angleRadians);
-  const helperDemand = sine > 0 ? (totalLoad * impactFactor) / (activeLugs * sine) : 0;
-
-  return {
-    totalLoad,
-    impactFactor,
-    activeLugs,
-    slingAngleDeg,
-    helperDemand: round(helperDemand),
-    selectedDemand: round(useHelperDemand ? helperDemand : manualDemand),
-    useHelperDemand
   };
 }
 
 export function calculateLiftingLug(rawInputs) {
   const inputs = {
-    designMethod: rawInputs.designMethod === "LRFD" ? "LRFD" : "ASD",
-    totalLoad: toFiniteNumber(rawInputs.totalLoad),
-    impactFactor: toFiniteNumber(rawInputs.impactFactor, 1),
-    activeLugs: toFiniteNumber(rawInputs.activeLugs, 1),
-    slingAngleDeg: toFiniteNumber(rawInputs.slingAngleDeg, 60),
-    useHelperDemand: rawInputs.useHelperDemand !== false,
-    manualDemand: toFiniteNumber(rawInputs.manualDemand),
-    fy: toFiniteNumber(rawInputs.fy, 50),
-    fu: toFiniteNumber(rawInputs.fu, 65),
-    thickness: toFiniteNumber(rawInputs.thickness, 1),
-    width: toFiniteNumber(rawInputs.width, 6),
-    holeDiameter: toFiniteNumber(rawInputs.holeDiameter, 2),
-    pinDiameter: toFiniteNumber(rawInputs.pinDiameter, 1.75),
-    edgeDistance: toFiniteNumber(rawInputs.edgeDistance, 3),
-    shearLagFactor: toFiniteNumber(rawInputs.shearLagFactor, 1),
-    blockShearFactor: toFiniteNumber(rawInputs.blockShearFactor, 1),
-    considerDeformation: rawInputs.considerDeformation !== false
+    elasticModulus: toFiniteNumber(rawInputs.elasticModulus, 29000),
+    baseFy: toFiniteNumber(rawInputs.baseFy, 50),
+    baseFu: toFiniteNumber(rawInputs.baseFu, 65),
+    lugFy: toFiniteNumber(rawInputs.lugFy, 50),
+    lugFu: toFiniteNumber(rawInputs.lugFu, 65),
+    materialAbovePin: toFiniteNumber(rawInputs.materialAbovePin, 6),
+    holeDiameter: toFiniteNumber(rawInputs.holeDiameter, 8),
+    pinDiameter: toFiniteNumber(rawInputs.pinDiameter, 8),
+    materialBelowHole: toFiniteNumber(rawInputs.materialBelowHole, 22),
+    lugThickness: toFiniteNumber(rawInputs.lugThickness, 1),
+    designLoad: toFiniteNumber(rawInputs.designLoad, 95),
+    outOfPlaneAngleDeg: toFiniteNumber(rawInputs.outOfPlaneAngleDeg, 0),
+    shearPlaneAngleDeg: toFiniteNumber(rawInputs.shearPlaneAngleDeg, 0),
+    nominalDesignFactor: toFiniteNumber(rawInputs.nominalDesignFactor, DEFAULT_ALLOWABLES.nominalDesignFactor),
+    tensionRuptureOmega: toFiniteNumber(rawInputs.tensionRuptureOmega, DEFAULT_ALLOWABLES.tensionRuptureOmega)
   };
 
-  const factors = DESIGN_FACTORS[inputs.designMethod];
-  const demand = buildDemand(inputs);
   const warnings = [];
+  const advisories = [
+    "Workbook formulas were ported directly from the Excel calculator, including the FM4 loose-pin bearing coefficient and the FM6 IFERROR behavior."
+  ];
 
-  if (inputs.slingAngleDeg <= 0 || inputs.slingAngleDeg >= 90) {
-    warnings.push("Sling angle must stay between 0 and 90 degrees from horizontal.");
+  if (inputs.lugThickness <= 0 || inputs.holeDiameter <= 0 || inputs.pinDiameter <= 0) {
+    warnings.push("Hole diameter, pin diameter, and lug thickness must all be greater than zero.");
+  }
+
+  if (inputs.materialAbovePin < 0 || inputs.materialBelowHole < 0) {
+    warnings.push("Material above and below the pin cannot be negative.");
   }
 
   if (inputs.pinDiameter > inputs.holeDiameter) {
     warnings.push("Pin diameter exceeds hole diameter.");
   }
 
-  if (inputs.width <= inputs.holeDiameter) {
-    warnings.push("Plate width at the hole must exceed the hole diameter.");
+  if (inputs.designLoad <= 0) {
+    warnings.push("Design load should be greater than zero.");
   }
 
-  if (inputs.edgeDistance <= inputs.holeDiameter / 2) {
-    warnings.push("Edge distance must exceed one-half of the hole diameter.");
+  if (inputs.nominalDesignFactor <= 0 || inputs.tensionRuptureOmega <= 0) {
+    warnings.push("Nominal design factor and tension rupture omega must be greater than zero.");
   }
 
-  if (inputs.thickness <= 0 || inputs.width <= 0 || inputs.edgeDistance <= 0) {
-    warnings.push("Plate dimensions must all be greater than zero.");
+  const radius = 0.5 * inputs.holeDiameter + inputs.materialAbovePin;
+  const sideMaterial = radius - 0.5 * inputs.holeDiameter;
+  const baseTotal = 2 * sideMaterial + inputs.holeDiameter;
+  const totalHeight = inputs.materialBelowHole + inputs.holeDiameter + inputs.materialAbovePin;
+
+  const shearPlaneRadians = (inputs.shearPlaneAngleDeg * Math.PI) / 180;
+  const outOfPlaneRadians = (inputs.outOfPlaneAngleDeg * Math.PI) / 180;
+  const shearReductionRadicand =
+    radius ** 2 - ((inputs.pinDiameter / 2) * Math.sin(shearPlaneRadians)) ** 2;
+  const shearPlaneReduction = shearReductionRadicand >= 0
+    ? radius - Math.sqrt(shearReductionRadicand)
+    : Number.NaN;
+
+  if (!Number.isFinite(shearPlaneReduction)) {
+    warnings.push("The shear-plane reduction term became invalid. Check the shear-plane angle and geometry.");
   }
 
-  if (!demand.useHelperDemand && demand.selectedDemand <= 0) {
-    warnings.push("Manual per-lug demand should be greater than zero.");
-  }
+  const grossTensionAllowableStress = inputs.nominalDesignFactor > 0
+    ? inputs.lugFy / inputs.nominalDesignFactor
+    : Number.NaN;
+  const grossTensionOmega = grossTensionAllowableStress > 0
+    ? inputs.lugFy / grossTensionAllowableStress
+    : Number.NaN;
+  const effectiveTensionAllowableStress = inputs.nominalDesignFactor > 0
+    ? inputs.lugFu / (1.2 * inputs.nominalDesignFactor)
+    : Number.NaN;
+  const bearingAllowableStress = inputs.nominalDesignFactor > 0
+    ? 1.25 * inputs.lugFy / inputs.nominalDesignFactor
+    : Number.NaN;
+  const bendingAllowableStress = inputs.nominalDesignFactor > 0
+    ? 1.25 * inputs.lugFy / inputs.nominalDesignFactor
+    : Number.NaN;
+  const bearingOmega = bearingAllowableStress > 0 ? inputs.lugFy / bearingAllowableStress : Number.NaN;
+  const bendingOmega = bendingAllowableStress > 0 ? inputs.lugFy / bendingAllowableStress : Number.NaN;
+  const slendernessLimit = inputs.lugFy > 0 ? 2.45 * Math.sqrt(inputs.elasticModulus / inputs.lugFy) : Number.NaN;
+  const shearAllowableStress = inputs.nominalDesignFactor > 0
+    ? (
+        inputs.materialAbovePin / inputs.lugThickness <= slendernessLimit
+          ? inputs.lugFy / (inputs.nominalDesignFactor * Math.sqrt(3))
+          : inputs.lugFy / inputs.nominalDesignFactor
+      )
+    : Number.NaN;
+  const shearOmega = shearAllowableStress > 0 ? inputs.lugFy / shearAllowableStress : Number.NaN;
 
-  if (demand.useHelperDemand && demand.selectedDemand <= 0) {
-    warnings.push("Rigging helper demand is zero or invalid. Check load, angle, and lug count.");
-  }
+  const effectiveTensionWidth = Math.min(sideMaterial, 2 * inputs.lugThickness + 0.63);
+  const shearArea = Number.isFinite(shearPlaneReduction)
+    ? 2 * (inputs.materialAbovePin - shearPlaneReduction + inputs.pinDiameter / 2) * inputs.lugThickness
+    : Number.NaN;
+  const plasticSectionModulus = 0.25 * baseTotal * inputs.lugThickness ** 2;
+  const outOfPlaneLeverArm = inputs.materialBelowHole + inputs.holeDiameter / 2;
+  const outOfPlaneSine = Math.sin(outOfPlaneRadians);
 
-  const netWidth = Math.max(inputs.width - inputs.holeDiameter, 0);
-  const clearEdgeDistance = Math.max(inputs.edgeDistance - inputs.holeDiameter / 2, 0);
-  const holeClearance = round(inputs.holeDiameter - inputs.pinDiameter, 4);
-  const grossArea = inputs.width * inputs.thickness;
-  const netArea = netWidth * inputs.thickness;
-  const effectiveNetArea = inputs.shearLagFactor * netArea;
-  const grossShearArea = 2 * inputs.edgeDistance * inputs.thickness;
-  const netShearArea = 2 * clearEdgeDistance * inputs.thickness;
-  const blockTensionArea = netArea;
-
-  const checks = [];
-
-  checks.push(
-    createCheck({
+  const capacities = [
+    createFailureMode({
       key: "grossYielding",
-      label: "Gross section yielding",
-      spec: "AISC 360-22 Chapter D",
-      nominal: inputs.fy * grossArea,
-      method: inputs.designMethod,
-      demand: demand.selectedDemand,
+      label: "FM 1 - Yielding of Gross Section",
+      reference: "AISC D2-1 / BTH Eq.3-1",
+      equation: "P_allow = t_lug * B_tot * Fy_lug / Omega_gross",
+      allowable: inputs.lugThickness * baseTotal * inputs.lugFy / grossTensionOmega,
+      load: inputs.designLoad,
       details: {
-        equation: "Rn = Fy Ag",
-        grossArea: round(grossArea),
-        fy: inputs.fy
-      },
-      phi: factors.grossYielding.phi,
-      omega: factors.grossYielding.omega
-    })
-  );
-
-  checks.push(
-    createCheck({
-      key: "netRupture",
-      label: "Net section rupture",
-      spec: "AISC 360-22 Chapter D",
-      nominal: inputs.fu * effectiveNetArea,
-      method: inputs.designMethod,
-      demand: demand.selectedDemand,
+        grossTensionOmega: round(grossTensionOmega, 3),
+        baseTotal: round(baseTotal),
+        lugThickness: round(inputs.lugThickness),
+        lugFy: round(inputs.lugFy)
+      }
+    }),
+    createFailureMode({
+      key: "tensionRupture",
+      label: "FM 2 - Tension Rupture on Effective Area",
+      reference: "AISC D5-1b",
+      equation: "P_allow = Fu_lug * (2 * t_lug * b_e,eff) / Omega_tension",
+      allowable: inputs.lugFu * (2 * inputs.lugThickness * effectiveTensionWidth) / inputs.tensionRuptureOmega,
+      load: inputs.designLoad,
       details: {
-        equation: "Rn = Fu Ae",
-        netArea: round(netArea),
-        effectiveNetArea: round(effectiveNetArea),
-        shearLagFactor: inputs.shearLagFactor,
-        fu: inputs.fu
-      },
-      phi: factors.netRupture.phi,
-      omega: factors.netRupture.omega
-    })
-  );
-
-  const blockShearRupture = 0.6 * inputs.fu * netShearArea + inputs.blockShearFactor * inputs.fu * blockTensionArea;
-  const blockShearYieldCap = 0.6 * inputs.fy * grossShearArea + inputs.blockShearFactor * inputs.fu * blockTensionArea;
-  const blockShearNominal = Math.min(blockShearRupture, blockShearYieldCap);
-
-  checks.push(
-    createCheck({
-      key: "blockShear",
-      label: "Block shear",
-      spec: "AISC 360-22 J4.3",
-      nominal: blockShearNominal,
-      method: inputs.designMethod,
-      demand: demand.selectedDemand,
+        effectiveTensionWidth: round(effectiveTensionWidth),
+        tensionRuptureOmega: round(inputs.tensionRuptureOmega, 3),
+        lugThickness: round(inputs.lugThickness),
+        lugFu: round(inputs.lugFu)
+      }
+    }),
+    createFailureMode({
+      key: "shearRupture",
+      label: "FM 3 - Shear Rupture (Parallel Planes)",
+      reference: "AISC D5-2",
+      equation: "P_allow = 0.6 * Fu_lug * A_sf / Omega_shear",
+      allowable: 0.6 * inputs.lugFu * shearArea / shearOmega,
+      load: inputs.designLoad,
       details: {
-        equation: "Rn = min(0.6FuAnv + UbsFuAnt, 0.6FyAgv + UbsFuAnt)",
-        grossShearArea: round(grossShearArea),
-        netShearArea: round(netShearArea),
-        tensionArea: round(blockTensionArea),
-        blockShearFactor: inputs.blockShearFactor
-      },
-      phi: factors.blockShear.phi,
-      omega: factors.blockShear.omega
-    })
-  );
-
-  const bearingLc = clearEdgeDistance;
-  const bearingNominal = inputs.considerDeformation
-    ? Math.min(1.2 * bearingLc * inputs.thickness * inputs.fu, 2.4 * inputs.pinDiameter * inputs.thickness * inputs.fu)
-    : Math.min(1.5 * bearingLc * inputs.thickness * inputs.fu, 3.0 * inputs.pinDiameter * inputs.thickness * inputs.fu);
-
-  checks.push(
-    createCheck({
-      key: "bearing",
-      label: "Pin bearing / tear-out proxy",
-      spec: "AISC 360-22 J3.10 style proxy",
-      nominal: bearingNominal,
-      method: inputs.designMethod,
-      demand: demand.selectedDemand,
+        shearArea: round(shearArea),
+        shearPlaneReduction: round(shearPlaneReduction),
+        shearOmega: round(shearOmega, 3),
+        lugFu: round(inputs.lugFu)
+      }
+    }),
+    createFailureMode({
+      key: "bearingFailure",
+      label: "FM 4 - Bearing Failure at Pin",
+      reference: "AISC J7-1 / Ricker 1991",
+      equation: "P_allow = 0.9 * Fy_lug * t_lug * D_pin / Omega_bearing",
+      allowable: 0.9 * inputs.lugFy * inputs.lugThickness * inputs.pinDiameter / bearingOmega,
+      load: inputs.designLoad,
       details: {
-        equation: inputs.considerDeformation
-          ? "Rn = min(1.2Lc t Fu, 2.4dp t Fu)"
-          : "Rn = min(1.5Lc t Fu, 3.0dp t Fu)",
-        clearEdgeDistance: round(bearingLc),
-        pinDiameter: inputs.pinDiameter,
-        fu: inputs.fu
-      },
-      phi: factors.bearing.phi,
-      omega: factors.bearing.omega,
-      isApproximate: true
+        loosePinCoefficient: 0.9,
+        bearingOmega: round(bearingOmega, 3),
+        lugThickness: round(inputs.lugThickness),
+        pinDiameter: round(inputs.pinDiameter)
+      }
+    }),
+    createFailureMode({
+      key: "lineTearOut",
+      label: "FM 5 - Tearing Tension Along Line of Action",
+      reference: "Ricker 1991 / ASME B30",
+      equation: "P_allow = 1.67 * Fy_lug * t_lug * a^2 / (Omega_bending * D_pin)",
+      allowable:
+        1.67 * inputs.lugFy * inputs.lugThickness * inputs.materialAbovePin ** 2 /
+        (bendingOmega * inputs.pinDiameter),
+      load: inputs.designLoad,
+      details: {
+        coefficient: 1.67,
+        bendingOmega: round(bendingOmega, 3),
+        materialAbovePin: round(inputs.materialAbovePin),
+        pinDiameter: round(inputs.pinDiameter)
+      }
+    }),
+    createFailureMode({
+      key: "outOfPlaneBending",
+      label: "FM 6 - Out-of-Plane Bending (Weak Axis)",
+      reference: "BTH-1 Eq.3-25",
+      equation: "P_allow = Fy_lug * Z_plastic^2 / (Omega_bending * sin(delta_oop) * (h + D_h/2))",
+      allowable:
+        outOfPlaneSine === 0
+          ? null
+          : inputs.lugFy * plasticSectionModulus ** 2 /
+            (bendingOmega * outOfPlaneSine * outOfPlaneLeverArm),
+      load: inputs.designLoad,
+      details: {
+        plasticSectionModulus: round(plasticSectionModulus),
+        bendingOmega: round(bendingOmega, 3),
+        outOfPlaneAngleDeg: round(inputs.outOfPlaneAngleDeg),
+        outOfPlaneLeverArm: round(outOfPlaneLeverArm)
+      }
     })
-  );
+  ];
 
-  const controllingCheck = [...checks].sort((left, right) => right.sortRatio - left.sortRatio)[0] || null;
-  const advisories = [];
+  const numericCapacities = capacities.filter((capacity) => Number.isFinite(capacity.allowable));
+  const controllingCheck = numericCapacities.sort((left, right) => left.allowable - right.allowable)[0] || null;
+  const allPass = capacities.every((capacity) => capacity.status !== "fail");
 
-  if (inputs.designMethod === "LRFD" && demand.useHelperDemand) {
-    advisories.push(
-      "The rigging helper is service-level statics only. Confirm the selected LRFD demand already reflects the required project load factors."
-    );
+  if (inputs.outOfPlaneAngleDeg === 0) {
+    advisories.push("FM 6 follows the workbook's IFERROR logic: a 0 degree out-of-plane angle is reported as not checked.");
   }
-
-  advisories.push(
-    "ASME BTH-1 classification, fatigue life, pin behavior, and supporting-member checks are not fully automated here and still need engineering review."
-  );
 
   return {
     inputs,
-    demand,
-    geometry: {
-      grossArea: round(grossArea),
-      netArea: round(netArea),
-      effectiveNetArea: round(effectiveNetArea),
-      grossShearArea: round(grossShearArea),
-      netShearArea: round(netShearArea),
-      blockTensionArea: round(blockTensionArea),
-      clearEdgeDistance: round(clearEdgeDistance),
-      holeClearance
+    demand: {
+      selectedDemand: round(inputs.designLoad)
     },
-    checks,
+    geometry: {
+      radius: round(radius),
+      sideMaterial: round(sideMaterial),
+      baseTotal: round(baseTotal),
+      totalHeight: round(totalHeight),
+      effectiveTensionWidth: round(effectiveTensionWidth),
+      shearArea: round(shearArea),
+      plasticSectionModulus: round(plasticSectionModulus),
+      outOfPlaneLeverArm: round(outOfPlaneLeverArm)
+    },
+    loading: {
+      designLoad: round(inputs.designLoad),
+      outOfPlaneAngleDeg: round(inputs.outOfPlaneAngleDeg),
+      shearPlaneAngleDeg: round(inputs.shearPlaneAngleDeg),
+      shearPlaneReduction: Number.isFinite(shearPlaneReduction) ? round(shearPlaneReduction) : null
+    },
+    allowables: [
+      {
+        key: "grossTension",
+        label: "Gross tension yield, Ft_gross",
+        reference: "BTH-1 Eq.3-1",
+        allowableStress: round(grossTensionAllowableStress),
+        safetyFactor: round(grossTensionOmega, 3)
+      },
+      {
+        key: "effectiveTension",
+        label: "Effective tension, Ft_effect",
+        reference: "BTH-1 Eq.3-2",
+        allowableStress: round(effectiveTensionAllowableStress),
+        safetyFactor: null
+      },
+      {
+        key: "bearing",
+        label: "Bearing stress, Fp",
+        reference: "BTH-1 Eq.3-53",
+        allowableStress: round(bearingAllowableStress),
+        safetyFactor: round(bearingOmega, 3)
+      },
+      {
+        key: "bending",
+        label: "Minor axis bending, Fb",
+        reference: "BTH-1 Eq.3-25",
+        allowableStress: round(bendingAllowableStress),
+        safetyFactor: round(bendingOmega, 3)
+      },
+      {
+        key: "shear",
+        label: "Shear, Fv",
+        reference: "BTH-1 / B30 3-2.3.6",
+        allowableStress: round(shearAllowableStress),
+        safetyFactor: round(shearOmega, 3)
+      }
+    ],
+    checks: capacities,
     controllingCheck,
+    summary: {
+      governingAllowableLoad: controllingCheck ? controllingCheck.allowable : null,
+      governingMode: controllingCheck ? controllingCheck.label : "No governing mode available",
+      allPass
+    },
     warnings,
     advisories
   };
 }
-
-export { DESIGN_FACTORS };

@@ -3,98 +3,87 @@ import assert from "node:assert/strict";
 
 import { calculateLiftingLug } from "../public/lifting-lug-engine.js";
 
-const baseInputs = {
-  totalLoad: 20,
-  impactFactor: 1.15,
-  activeLugs: 2,
-  slingAngleDeg: 60,
-  useHelperDemand: true,
-  manualDemand: 12,
-  designMethod: "ASD",
-  considerDeformation: true,
-  shearLagFactor: 1,
-  blockShearFactor: 1,
-  fy: 50,
-  fu: 65,
-  thickness: 1,
-  width: 6,
-  holeDiameter: 2,
-  pinDiameter: 1.75,
-  edgeDistance: 3
+const workbookInputs = {
+  elasticModulus: 29000,
+  baseFy: 50,
+  baseFu: 65,
+  lugFy: 50,
+  lugFu: 65,
+  materialAbovePin: 6,
+  holeDiameter: 8,
+  pinDiameter: 8,
+  materialBelowHole: 22,
+  lugThickness: 1,
+  designLoad: 95,
+  outOfPlaneAngleDeg: 0,
+  shearPlaneAngleDeg: 0,
+  nominalDesignFactor: 4,
+  tensionRuptureOmega: 3
 };
 
-test("rigging helper computes per-lug demand from load, factor, and sling angle", () => {
-  const result = calculateLiftingLug(baseInputs);
+test("workbook example reproduces the key geometry values", () => {
+  const result = calculateLiftingLug(workbookInputs);
 
-  assert.equal(result.demand.helperDemand, 13.279);
-  assert.equal(result.demand.selectedDemand, 13.279);
+  assert.equal(result.geometry.radius, 10);
+  assert.equal(result.geometry.sideMaterial, 6);
+  assert.equal(result.geometry.baseTotal, 20);
+  assert.equal(result.geometry.totalHeight, 36);
 });
 
-test("lug-only calculator returns four implemented checks", () => {
-  const result = calculateLiftingLug(baseInputs);
+test("workbook example reproduces the BTH allowable stresses", () => {
+  const result = calculateLiftingLug(workbookInputs);
+  const shear = result.allowables.find((item) => item.key === "shear");
+
+  assert.equal(result.allowables.find((item) => item.key === "grossTension").allowableStress, 12.5);
+  assert.equal(result.allowables.find((item) => item.key === "effectiveTension").allowableStress, 13.542);
+  assert.equal(result.allowables.find((item) => item.key === "bearing").allowableStress, 15.625);
+  assert.equal(shear.allowableStress, 7.217);
+  assert.equal(shear.safetyFactor, 6.928);
+});
+
+test("workbook example reproduces the six failure mode outputs", () => {
+  const result = calculateLiftingLug(workbookInputs);
 
   assert.deepEqual(
-    result.checks.map((check) => check.key),
-    ["grossYielding", "netRupture", "blockShear", "bearing"]
+    result.checks.map((check) => [check.key, check.allowable]),
+    [
+      ["grossYielding", 250],
+      ["tensionRupture", 113.967],
+      ["shearRupture", 112.583],
+      ["bearingFailure", 112.5],
+      ["lineTearOut", 117.422],
+      ["outOfPlaneBending", null]
+    ]
   );
 });
 
-test("checks expose the ASD or LRFD factor used", () => {
-  const asd = calculateLiftingLug(baseInputs);
-  const asdBearing = asd.checks.find((check) => check.key === "bearing");
-  const lrfd = calculateLiftingLug({ ...baseInputs, designMethod: "LRFD" });
-  const lrfdBearing = lrfd.checks.find((check) => check.key === "bearing");
+test("bearing failure governs the workbook example", () => {
+  const result = calculateLiftingLug(workbookInputs);
 
-  assert.equal(asdBearing.factorLabel, "Omega");
-  assert.equal(asdBearing.factorValue, 2);
-  assert.equal(asdBearing.availableExpression, "Rn / Omega");
-  assert.equal(lrfdBearing.factorLabel, "phi");
-  assert.equal(lrfdBearing.factorValue, 0.75);
-  assert.equal(lrfdBearing.availableExpression, "phi Rn");
+  assert.equal(result.controllingCheck.key, "bearingFailure");
+  assert.equal(result.controllingCheck.allowable, 112.5);
+  assert.equal(result.summary.governingAllowableLoad, 112.5);
 });
 
-test("weak end distance causes the bearing proxy to control and fail", () => {
+test("out-of-plane bending becomes numeric when the angle is nonzero", () => {
   const result = calculateLiftingLug({
-    ...baseInputs,
-    totalLoad: 30,
-    impactFactor: 1.25,
-    activeLugs: 1,
-    width: 4,
-    thickness: 0.5,
-    holeDiameter: 2.5,
-    pinDiameter: 2.375,
-    edgeDistance: 1.5
+    ...workbookInputs,
+    outOfPlaneAngleDeg: 10
   });
 
-  assert.equal(result.controllingCheck.key, "bearing");
-  assert.equal(result.controllingCheck.status, "fail");
-  assert.equal(result.controllingCheck.available, 4.875);
+  const weakAxis = result.checks.find((check) => check.key === "outOfPlaneBending");
+
+  assert.equal(weakAxis.status, "fail");
+  assert.ok(weakAxis.allowable < workbookInputs.designLoad);
 });
 
-test("lrfd gross yielding uses phi times nominal strength", () => {
+test("invalid geometry still produces direct warnings", () => {
   const result = calculateLiftingLug({
-    ...baseInputs,
-    designMethod: "LRFD",
-    useHelperDemand: false,
-    manualDemand: 100
-  });
-  const grossYielding = result.checks.find((check) => check.key === "grossYielding");
-
-  assert.equal(grossYielding.nominal, 300);
-  assert.equal(grossYielding.available, 270);
-  assert.equal(grossYielding.status, "pass");
-});
-
-test("invalid geometry produces direct warnings", () => {
-  const result = calculateLiftingLug({
-    ...baseInputs,
-    width: 2,
-    holeDiameter: 2,
-    pinDiameter: 2.25,
-    edgeDistance: 1
+    ...workbookInputs,
+    lugThickness: 0,
+    pinDiameter: 9
   });
 
+  assert.ok(result.warnings.includes("Hole diameter, pin diameter, and lug thickness must all be greater than zero."));
   assert.ok(result.warnings.includes("Pin diameter exceeds hole diameter."));
-  assert.ok(result.warnings.includes("Plate width at the hole must exceed the hole diameter."));
-  assert.ok(result.warnings.includes("Edge distance must exceed one-half of the hole diameter."));
 });
