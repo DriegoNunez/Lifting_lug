@@ -3,220 +3,118 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Lifting Lug Static Design Calculator</title>
+    <title>Lifting Lug Design Workbook Port</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main class="app-shell">
-      <section class="hero panel">
-        <div class="hero-copy">
-          <p class="eyebrow">Excel workbook port | ASME BTH-1-2023 + AISC 360-22 context</p>
-          <h1 class="title">Lifting lug static design calculator</h1>
-          <p class="lead">
-            Browser-based version of the workbook in this repository. The page now tracks the spreadsheet's material,
-            geometry, loading, allowable-stress, and failure-mode calculations for FM1 through FM6.
-          </p>
-        </div>
-
-        <div class="stat-grid">
-          <article class="stat-card">
-            <span class="stat-label">Design load</span>
-            <strong class="stat-value" data-design-load>--</strong>
-            <small>Direct workbook load input</small>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Governing capacity</span>
-            <strong class="stat-value" data-governing-capacity>--</strong>
-            <small>Minimum numeric P_allow</small>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Reserve ratio</span>
-            <strong class="stat-value" data-reserve-ratio>--</strong>
-            <small>Governing capacity / design load</small>
-          </article>
-          <article class="stat-card">
-            <span class="stat-label">Shear reduction Z'</span>
-            <strong class="stat-value" data-shear-reduction>--</strong>
-            <small>ASME B30 Eq. C-2 term</small>
-          </article>
-          <article class="stat-card stat-card-accent">
-            <span class="stat-label">Governing mode</span>
-            <strong class="stat-value" data-governing-mode>--</strong>
-            <small data-governing-copy>Waiting for inputs</small>
-          </article>
-        </div>
-      </section>
-
-      <section class="workspace">
-        <form class="panel input-panel" data-form>
-          <div class="panel-heading">
-            <h2>Workbook Inputs</h2>
-            <p>US customary units: kips, inches, and ksi.</p>
-          </div>
-
-          <fieldset class="input-group">
-            <legend>Material properties</legend>
-            <div class="input-grid">
-              <label>
-                <span>Elastic modulus, E (ksi)</span>
-                <input type="number" step="100" min="0" name="elasticModulus">
-              </label>
-              <label>
-                <span>Base Fy (ksi)</span>
-                <input type="number" step="0.1" min="0" name="baseFy">
-              </label>
-              <label>
-                <span>Base Fu (ksi)</span>
-                <input type="number" step="0.1" min="0" name="baseFu">
-              </label>
-              <label>
-                <span>Lug Fy (ksi)</span>
-                <input type="number" step="0.1" min="0" name="lugFy">
-              </label>
-              <label class="input-span-2">
-                <span>Lug Fu (ksi)</span>
-                <input type="number" step="0.1" min="0" name="lugFu">
-              </label>
-            </div>
-          </fieldset>
-
-          <fieldset class="input-group">
-            <legend>Lug section geometry</legend>
-            <div class="input-grid">
-              <label>
-                <span>Material above pin, a (in)</span>
-                <input type="number" step="0.125" min="0" name="materialAbovePin">
-              </label>
-              <label>
-                <span>Hole diameter, D_h (in)</span>
-                <input type="number" step="0.125" min="0" name="holeDiameter">
-              </label>
-              <label>
-                <span>Pin diameter, D_pin (in)</span>
-                <input type="number" step="0.125" min="0" name="pinDiameter">
-              </label>
-              <label>
-                <span>Material below hole, h (in)</span>
-                <input type="number" step="0.125" min="0" name="materialBelowHole">
-              </label>
-              <label class="input-span-2">
-                <span>Lug thickness, t_lug (in)</span>
-                <input type="number" step="0.0625" min="0" name="lugThickness">
-              </label>
-            </div>
-          </fieldset>
-
-          <fieldset class="input-group">
-            <legend>Loading</legend>
-            <div class="input-grid">
-              <label>
-                <span>Design load (kip)</span>
-                <input type="number" step="0.1" min="0" name="designLoad">
-              </label>
-              <label>
-                <span>Out-of-plane angle, delta_oop (deg)</span>
-                <input type="number" step="0.1" min="0" max="89.9" name="outOfPlaneAngleDeg">
-              </label>
-              <label class="input-span-2">
-                <span>Shear plane loading angle, phi (deg)</span>
-                <input type="number" step="0.1" min="0" max="89.9" name="shearPlaneAngleDeg">
-              </label>
-            </div>
-          </fieldset>
-
-          <fieldset class="input-group">
-            <legend>Allowable-stress factors</legend>
-            <div class="input-grid">
-              <label>
-                <span>Nominal design factor, Nd</span>
-                <input type="number" step="0.1" min="0.1" name="nominalDesignFactor">
-              </label>
-              <label class="input-span-2">
-                <span>Tension rupture omega</span>
-                <input type="number" step="0.1" min="0.1" name="tensionRuptureOmega">
-              </label>
-            </div>
-          </fieldset>
-        </form>
-
-        <section class="panel output-panel" aria-live="polite">
-          <div class="panel-heading">
-            <h2>Results</h2>
-            <p>The cards below follow the formulas visible in the Excel workbook shipped with this repo.</p>
-          </div>
-
-          <div class="verdict-card" data-verdict></div>
-
-          <div class="visual-grid">
-            <div class="diagram-card">
-              <div class="subheading-row">
-                <h3>Lug figure</h3>
-                <span class="chip">Workbook geometry</span>
-              </div>
-              <svg class="diagram" data-diagram viewBox="0 0 420 360" role="img" aria-label="Lifting lug geometry"></svg>
-            </div>
-
-            <div class="geometry-card">
-              <div class="subheading-row">
-                <h3>Derived geometry</h3>
-                <span class="chip">Section 2 + 3</span>
-              </div>
-              <div class="metric-grid" data-geometry></div>
-            </div>
-          </div>
-
-          <div class="subheading-row">
-            <h3>Allowable stresses</h3>
-            <span class="chip">Section 4</span>
-          </div>
-          <div class="allowables-grid" data-allowables></div>
-
-          <div class="subheading-row">
-            <h3>Failure-mode capacities</h3>
-            <span class="chip">Section 5</span>
-          </div>
-          <div class="checks-grid" data-checks></div>
-
-          <div class="messages" data-messages></div>
-        </section>
-      </section>
-
-      <section class="panel sources-panel">
-        <div class="panel-heading">
-          <h2>Workbook Notes</h2>
-          <p>
-            This page mirrors the spreadsheet logic as closely as practical in browser code. It remains a transparent
-            engineering aid rather than a stamped design package.
-          </p>
-        </div>
-
-        <div class="source-layout">
-          <div>
-            <h3>Ported calculations</h3>
-            <ul class="plain-list">
-              <li>Geometry derivations for r, b_e, B_tot, H, Z', A_sf, and Z_plastic.</li>
-              <li>BTH-1 allowable stresses and safety factors used by the workbook.</li>
-              <li>FM1 through FM6 allowable load formulas and governing-capacity summary.</li>
-            </ul>
-          </div>
-
-          <div>
-            <h3>Important notes</h3>
-            <ul class="plain-list">
-              <li>FM4 uses the workbook's 0.9 loose-pin bearing coefficient from the note set.</li>
-              <li>FM2 limits the effective rupture width to min(b_e, 2t + 0.63 in).</li>
-              <li>FM6 follows the workbook's not-checked behavior when the out-of-plane angle is 0 degrees.</li>
-            </ul>
-          </div>
-        </div>
-
+    <main class="workbook-page" data-app>
+      <header class="workbook-header">
         <div>
-          <h3>References</h3>
-          <ul class="source-list">
-            <li><a href="https://www.asme.org/codes-standards/find-codes-standards/bth-1-design-of-below-the-hook-lifting-devices" target="_blank" rel="noreferrer">ASME BTH-1: Design of Below-the-Hook Lifting Devices</a></li>
-            <li><a href="https://www.aisc.org/2022spec" target="_blank" rel="noreferrer">AISC 360-22 Specification landing page</a></li>
-          </ul>
+          <p class="kicker">Excel source-of-truth implementation</p>
+          <h1 data-workbook-title></h1>
+          <p class="subtitle" data-workbook-subtitle></p>
         </div>
+
+        <div class="header-tools">
+          <div class="meta-grid">
+            <label>
+              <span>Project</span>
+              <input type="text" data-meta-input="project">
+            </label>
+            <label>
+              <span>Project Number</span>
+              <input type="text" data-meta-input="projectNumber">
+            </label>
+            <label>
+              <span>Company</span>
+              <input type="text" data-meta-input="company">
+            </label>
+            <label>
+              <span>Workbook Date</span>
+              <input type="text" data-meta-input="workbookDate">
+            </label>
+          </div>
+
+          <div class="save-panel">
+            <div class="save-actions">
+              <button type="button" class="action-button" data-save-project>Save Project</button>
+              <button type="button" class="action-button secondary" data-new-project>New Project</button>
+            </div>
+
+            <label class="saved-projects">
+              <span>Saved Calculations</span>
+              <select data-saved-projects>
+                <option value="">Select a saved calculation</option>
+              </select>
+            </label>
+
+            <div class="save-actions">
+              <button type="button" class="action-button secondary" data-load-project>Load Selected</button>
+              <button type="button" class="action-button danger" data-delete-project>Delete Selected</button>
+            </div>
+
+            <p class="save-status" data-save-status></p>
+          </div>
+        </div>
+      </header>
+
+      <section class="comparison-banner" data-comparison></section>
+
+      <section class="panel" id="material-properties">
+        <div class="section-heading">
+          <h2>1. Material Properties</h2>
+          <p>Yellow cells are editable inputs. Read-only cells mirror workbook-derived values.</p>
+        </div>
+        <div data-material-section></div>
+      </section>
+
+      <section class="panel" id="lug-geometry">
+        <div class="section-heading">
+          <h2>2. Lug Section Geometry</h2>
+          <p>The geometry table keeps the workbook input rows and helper-cell sequence `r`, `b_e`, `B_tot`, and `H`.</p>
+        </div>
+        <div class="figure-strip workbook-figures" data-geometry-figures></div>
+        <div data-geometry-section></div>
+      </section>
+
+      <section class="panel" id="loading-information">
+        <div class="section-heading">
+          <h2>3. Loading Information</h2>
+          <p>Workbook demand inputs plus the ASME B30 shear-plane reduction term `Z'`.</p>
+        </div>
+        <div data-loading-section></div>
+      </section>
+
+      <section class="panel" id="allowable-stresses">
+        <div class="section-heading">
+          <h2>4. Allowable Stresses &amp; Safety Factors</h2>
+          <p>ASME BTH-1 allowables and the workbook safety-factor treatment, including the blank rupture omega column.</p>
+        </div>
+        <div data-allowables-section></div>
+      </section>
+
+      <section class="panel" id="failure-modes">
+        <div class="section-heading">
+          <h2>5. Failure Mode Capacities</h2>
+          <p>Each mode keeps its own helper row, formula text, capacity, workbook figure region, and governing flag.</p>
+        </div>
+        <div class="mode-stack" data-failure-modes></div>
+      </section>
+
+      <section class="panel" id="design-summary">
+        <div class="section-heading">
+          <h2>6. Design Summary</h2>
+          <p>The summary mirrors the workbook review table and governing-capacity row.</p>
+        </div>
+        <div data-summary-section></div>
+      </section>
+
+      <section class="panel" id="notes">
+        <div class="section-heading">
+          <h2>7. Notes</h2>
+          <p>The workbook notes are preserved verbatim in intent and order.</p>
+        </div>
+        <div data-notes-section></div>
       </section>
     </main>
 
